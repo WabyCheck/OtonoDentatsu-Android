@@ -133,8 +133,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     }
 
     override fun onPacketReceived(data: ByteArray, size: Int) {
-        // Декодирование Opus
-        val pcmData = decodeOpus(data, 960)
+        // Декодирование Opus (Ultra‑low latency: 2.5ms → 120 сэмплов)
+        val pcmData = decodeOpus(data, 120)
         if (pcmData != null) {
             playAudio(pcmData)
         }

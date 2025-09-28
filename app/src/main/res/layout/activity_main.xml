@@ -17,7 +17,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Введите IP (например, 192.168.0.100)"
-        android:inputType="text"
+        android:inputType="numberDecimal"
+        android:digits="0123456789."
         android:layout_marginTop="16dp"
         android:layout_marginBottom="8dp" />
 
@@ -27,7 +28,8 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
         android:hint="Введите порт (например, 5000)"
-        android:inputType="number" />
+        android:inputType="number"
+        android:digits="0123456789." />
 
     <Button
         android:id="@+id/buttonToggle"
