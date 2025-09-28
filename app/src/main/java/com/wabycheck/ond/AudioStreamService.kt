@@ -20,7 +20,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var isRunning = false
 
     companion object {
-        const val CHANNEL_ID = "AudioStreamChannel"
+        const val CHANNEL_ID = "AudioStreamChannelV2"
         const val NOTIFICATION_ID = 1
 
         // Действия для уведомлений
@@ -148,10 +148,11 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Audio Stream Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Канал для фонового воспроизведения аудио"
                 setSound(null, null)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
 
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -178,18 +179,25 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Audio Stream")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(openAppPendingIntent)
             .setOngoing(isActive)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
             .addAction(
                 android.R.drawable.ic_media_pause,
                 "Остановить",
                 stopPendingIntent
             )
-            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+        return builder.build()
     }
 
     fun isStreamRunning(): Boolean = isRunning
