@@ -116,6 +116,9 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
             }
         } catch (_: Exception) {}
 
+        // Флаг активности — ДО запуска потоков
+        isRunning = true
+
         // Запуск UDP приемника
         udpReceiver = UDPReceiver(this)
         udpReceiver?.startListening(port)
@@ -144,7 +147,6 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         decoderThread?.start()
 
 
-        isRunning = true
         sendState(true)
     }
 
