@@ -103,14 +103,17 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         decoderThread = Thread {
             try {
                 // Предзаполнение ~несколькими пакетами для сглаживания
-                while (isRunning && packetQueue.size < 3) {
+                while (isRunning && packetQueue.size < 8) {
                     Thread.sleep(2)
                 }
                 while (isRunning) {
-                    val pkt = packetQueue.poll(50, TimeUnit.MILLISECONDS)
+                    val pkt = packetQueue.poll(10, TimeUnit.MILLISECONDS)
                     if (pkt != null) {
                         val pcm = decodeOpus(pkt, 960)
                         if (pcm != null) playAudio(pcm)
+                    } else {
+                        // небольшая уступка планировщику
+                        Thread.yield()
                     }
                 }
             } catch (_: InterruptedException) {

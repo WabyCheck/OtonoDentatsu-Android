@@ -22,8 +22,10 @@ class UDPReceiver(
         isRunning = true
         try {
             val address = InetAddress.getByName("0.0.0.0")  // Принимать на любом интерфейсе
-            socket = DatagramSocket(port, address)
-            Log.d("UDPReceiver", "Слушаю на 0.0.0.0:$port")
+            socket = DatagramSocket(port, address).apply {
+                try { receiveBufferSize = 256 * 1024 } catch (_: Exception) {}
+            }
+            Log.d("UDPReceiver", "Слушаю на 0.0.0.0:$port (rbuf=${socket?.receiveBufferSize})")
         } catch (e: Exception) {
             Log.e("UDPReceiver", "Ошибка инициализации сокета: ${e.message}")
             isRunning = false
@@ -33,7 +35,7 @@ class UDPReceiver(
         receiverThread = Thread {
             val s = socket
             if (s == null) return@Thread
-            val buffer = ByteArray(2048)
+            val buffer = ByteArray(4096)
             val packet = DatagramPacket(buffer, buffer.size)
             while (isRunning) {
                 try {
