@@ -10,6 +10,9 @@ import android.media.AudioTrack
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.net.wifi.WifiManager
+import android.os.PowerManager
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -22,6 +25,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var isRunning = false
     private val packetQueue = ArrayBlockingQueue<ByteArray>(200)
     private var decoderThread: Thread? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         const val CHANNEL_ID = "AudioStreamChannelV2"
@@ -95,6 +100,22 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         val notification = createNotification("Слушаем на порту $port", true)
         startForeground(NOTIFICATION_ID, notification)
 
+        // Повышаем приоритет: держим Wi-Fi и CPU активными
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "OND:WifiLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {}
+        try {
+            val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OND:WakeLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {}
+
         // Запуск UDP приемника
         udpReceiver = UDPReceiver(this)
         udpReceiver?.startListening(port)
@@ -102,6 +123,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         // Запуск декодера с небольшим джиттер-буфером
         decoderThread = Thread {
             try {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
                 // Предзаполнение ~несколькими пакетами для сглаживания
                 while (isRunning && packetQueue.size < 8) {
                     Thread.sleep(2)
@@ -147,6 +169,12 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         isRunning = false
         stopForeground(true)
         sendState(false)
+
+        // Освобождаем ресурсы
+        try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+        wifiLock = null
+        try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+        wakeLock = null
     }
 
     override fun onPacketReceived(data: ByteArray, size: Int) {

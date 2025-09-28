@@ -37,6 +37,7 @@ class UDPReceiver(
             if (s == null) return@Thread
             val buffer = ByteArray(4096)
             val packet = DatagramPacket(buffer, buffer.size)
+            try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO) } catch (_: Exception) {}
             while (isRunning) {
                 try {
                     s.receive(packet)
