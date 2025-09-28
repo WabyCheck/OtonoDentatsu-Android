@@ -20,29 +20,31 @@ class UDPReceiver(
         if (isRunning) return
 
         isRunning = true
+        try {
+            val address = InetAddress.getByName("0.0.0.0")  // Принимать на любом интерфейсе
+            socket = DatagramSocket(port, address)
+            Log.d("UDPReceiver", "Слушаю на 0.0.0.0:$port")
+        } catch (e: Exception) {
+            Log.e("UDPReceiver", "Ошибка инициализации сокета: ${e.message}")
+            isRunning = false
+            return
+        }
+
         receiverThread = Thread {
-            try {
-                val address = InetAddress.getByName("0.0.0.0")  // Принимать на любом интерфейсе
-                socket = DatagramSocket(port, address)
-
-                Log.d("UDPReceiver", "Слушаю на 0.0.0.0:$port")
-
-                val buffer = ByteArray(2048)
-                val packet = DatagramPacket(buffer, buffer.size)
-
-                while (isRunning) {
-                    try {
-                        socket?.receive(packet)
-                        val receivedData = packet.data.copyOfRange(0, packet.length)
-                        listener.onPacketReceived(receivedData, packet.length)
-                    } catch (e: Exception) {
-                        if (isRunning) {
-                            Log.e("UDPReceiver", "Ошибка приёма: ${e.message}")
-                        }
+            val s = socket
+            if (s == null) return@Thread
+            val buffer = ByteArray(2048)
+            val packet = DatagramPacket(buffer, buffer.size)
+            while (isRunning) {
+                try {
+                    s.receive(packet)
+                    val receivedData = packet.data.copyOfRange(0, packet.length)
+                    listener.onPacketReceived(receivedData, packet.length)
+                } catch (e: Exception) {
+                    if (isRunning) {
+                        Log.e("UDPReceiver", "Ошибка приёма: ${e.message}")
                     }
                 }
-            } catch (e: Exception) {
-                Log.e("UDPReceiver", "Ошибка инициализации сокета: ${e.message}")
             }
         }
         receiverThread?.start()
