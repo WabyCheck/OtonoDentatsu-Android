@@ -29,7 +29,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var decoderThread: Thread? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    @Volatile private var targetPrebuffer: Int = 8
+    @Volatile private var targetPrebuffer: Int = 12
     private var screenReceiver: BroadcastReceiver? = null
 
     companion object {
@@ -152,6 +152,10 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
                     if (pkt != null) {
                         val pcm = decodeOpus(pkt, 960)
                         if (pcm != null) playAudio(pcm)
+                        // лёгкое темповое сглаживание при переполнении
+                        if (packetQueue.size > targetPrebuffer + 2) {
+                            try { Thread.sleep(5) } catch (_: Exception) {}
+                        }
                     } else {
                         // небольшая уступка планировщику
                         Thread.yield()
@@ -324,7 +328,12 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
         }
-        registerReceiver(screenReceiver, filter)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(screenReceiver, filter)
+        }
     }
 
     private fun unregisterScreenReceiver() {
@@ -336,9 +345,9 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         try {
             val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) pm.isInteractive else @Suppress("DEPRECATION") pm.isScreenOn
-            targetPrebuffer = if (interactive) 8 else 16
+            targetPrebuffer = if (interactive) 12 else 24
         } catch (_: Exception) {
-            targetPrebuffer = 8
+            targetPrebuffer = 12
         }
     }
 
