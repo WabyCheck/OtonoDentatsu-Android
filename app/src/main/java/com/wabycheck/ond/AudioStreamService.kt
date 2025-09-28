@@ -65,8 +65,15 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
                 val serverIp = intent.getStringExtra(EXTRA_SERVER_IP)
                 startAudioStream(port)
                 if (!serverIp.isNullOrBlank()) {
-                    // отправим HELLO на ПК с того же порта
-                    udpReceiver?.sendHello(serverIp, port)
+                    // отправим HELLO несколько раз для надёжности
+                    Thread {
+                        try {
+                            repeat(4) {
+                                udpReceiver?.sendHello(serverIp, port)
+                                Thread.sleep(400)
+                            }
+                        } catch (_: InterruptedException) {}
+                    }.start()
                 }
             }
             ACTION_STOP -> {

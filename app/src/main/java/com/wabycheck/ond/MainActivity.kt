@@ -21,8 +21,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var editTextIP: EditText
     private lateinit var editTextPort: EditText
-    private lateinit var buttonStart: Button
-    private lateinit var buttonStop: Button
+    private lateinit var buttonToggle: Button
 
     private var bound = false
     private var service: AudioStreamService? = null
@@ -63,51 +62,48 @@ class MainActivity : AppCompatActivity() {
         // Инициализация Views
         editTextIP = findViewById(R.id.editTextIP)
         editTextPort = findViewById(R.id.editTextPort)
-        buttonStart = findViewById(R.id.buttonStart)
-        buttonStop = findViewById(R.id.buttonStop)
+        buttonToggle = findViewById(R.id.buttonToggle)
 
         // Установка значений по умолчанию
         editTextIP.setText("192.168.0.100")
         editTextPort.setText("5000")
 
-        buttonStart.setOnClickListener {
-            ensureNotificationPermission()
+        buttonToggle.setOnClickListener {
+            buttonToggle.isEnabled = false
+            if (service?.isStreamRunning() == true) {
+                val intent = Intent(this, AudioStreamService::class.java).apply {
+                    action = AudioStreamService.ACTION_STOP
+                }
+                startService(intent)
+            } else {
+                ensureNotificationPermission()
 
-            val ip = editTextIP.text.toString()
-            val portText = editTextPort.text.toString()
+                val ip = editTextIP.text.toString()
+                val portText = editTextPort.text.toString()
 
-            if (ip.isEmpty() || portText.isEmpty()) {
-                Toast.makeText(this, "Заполните IP и порт", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+                if (ip.isEmpty() || portText.isEmpty()) {
+                    Toast.makeText(this, "Заполните IP и порт", Toast.LENGTH_SHORT).show()
+                    buttonToggle.isEnabled = true
+                    return@setOnClickListener
+                }
+
+                val port = portText.toIntOrNull()
+                if (port == null) {
+                    Toast.makeText(this, "Порт должен быть числом", Toast.LENGTH_SHORT).show()
+                    buttonToggle.isEnabled = true
+                    return@setOnClickListener
+                }
+
+                val intent = Intent(this, AudioStreamService::class.java).apply {
+                    action = AudioStreamService.ACTION_START
+                    putExtra(AudioStreamService.EXTRA_PORT, port)
+                    putExtra(AudioStreamService.EXTRA_SERVER_IP, ip)
+                }
+                ContextCompat.startForegroundService(this, intent)
+                Toast.makeText(this, "Слушаем на порту $port", Toast.LENGTH_SHORT).show()
             }
-
-            val port = portText.toIntOrNull()
-            if (port == null) {
-                Toast.makeText(this, "Порт должен быть числом", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val intent = Intent(this, AudioStreamService::class.java).apply {
-                action = AudioStreamService.ACTION_START
-                putExtra(AudioStreamService.EXTRA_PORT, port)
-                putExtra(AudioStreamService.EXTRA_SERVER_IP, ip)
-            }
-            ContextCompat.startForegroundService(this, intent)
-
-            buttonStart.isEnabled = false
-            buttonStop.isEnabled = true
-            Toast.makeText(this, "Слушаем на порту $port", Toast.LENGTH_SHORT).show()
-        }
-
-        buttonStop.setOnClickListener {
-            val intent = Intent(this, AudioStreamService::class.java).apply {
-                action = AudioStreamService.ACTION_STOP
-            }
-            startService(intent)
-
-            buttonStart.isEnabled = true
-            buttonStop.isEnabled = false
-            Toast.makeText(this, "Остановлено", Toast.LENGTH_SHORT).show()
+            // state will be updated by broadcast; re-enable button
+            buttonToggle.isEnabled = true
         }
     }
 
@@ -148,7 +144,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyRunningState(running: Boolean) {
-        buttonStart.isEnabled = !running
-        buttonStop.isEnabled = running
+        buttonToggle.text = if (running) "Стоп" else "Старт"
+        buttonToggle.isEnabled = true
     }
 }

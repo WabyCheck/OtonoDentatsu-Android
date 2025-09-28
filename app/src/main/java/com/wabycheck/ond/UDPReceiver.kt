@@ -64,6 +64,7 @@ class UDPReceiver(
             val addr = InetAddress.getByName(targetIp)
             val packet = DatagramPacket(data, data.size, addr, targetPort)
             s.send(packet)
+            Log.d("UDPReceiver", "HELLO sent to $targetIp:$targetPort from port ${s.localPort}")
         } catch (_: Exception) {
         }
     }
