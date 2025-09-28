@@ -113,14 +113,22 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         // Подписка на состояние
-        registerReceiver(stateReceiver, IntentFilter(AudioStreamService.ACTION_STATE))
+        val filter = IntentFilter(AudioStreamService.ACTION_STATE)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(stateReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(stateReceiver, filter)
+        }
         // Привязка к сервису для запроса текущего состояния
         bindService(Intent(this, AudioStreamService::class.java), connection, BIND_AUTO_CREATE)
     }
 
     override fun onStop() {
         super.onStop()
-        unregisterReceiver(stateReceiver)
+        try {
+            unregisterReceiver(stateReceiver)
+        } catch (_: IllegalArgumentException) { }
         if (bound) {
             unbindService(connection)
             bound = false
