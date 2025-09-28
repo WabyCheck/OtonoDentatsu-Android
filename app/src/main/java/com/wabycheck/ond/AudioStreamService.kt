@@ -27,6 +27,10 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         const val ACTION_START = "START_AUDIO_STREAM"
         const val ACTION_STOP = "STOP_AUDIO_STREAM"
 
+        // Широковещательные оповещения о состоянии
+        const val ACTION_STATE = "AUDIO_STREAM_STATE"
+        const val EXTRA_IS_RUNNING = "is_running"
+
         // Дополнительные параметры
         const val EXTRA_PORT = "port"
 
@@ -79,6 +83,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         udpReceiver?.startListening(port)
 
         isRunning = true
+        sendState(true)
     }
 
     private fun stopAudioStream() {
@@ -95,6 +100,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
 
         isRunning = false
         stopForeground(true)
+        sendState(false)
     }
 
     override fun onPacketReceived(data: ByteArray, size: Int) {
@@ -206,5 +212,14 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         super.onDestroy()
         stopAudioStream()
         destroyOpusDecoder()
+        sendState(false)
+    }
+
+    private fun sendState(running: Boolean) {
+        val intent = Intent(ACTION_STATE).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_IS_RUNNING, running)
+        }
+        sendBroadcast(intent)
     }
 }

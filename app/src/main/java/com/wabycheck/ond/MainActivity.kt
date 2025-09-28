@@ -1,12 +1,15 @@
 package com.wabycheck.ond
 
 import android.Manifest
-import android.app.NotificationManager
-import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -21,12 +24,37 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonStart: Button
     private lateinit var buttonStop: Button
 
+    private var bound = false
+    private var service: AudioStreamService? = null
+
     private val requestNotifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) {
                 Toast.makeText(this, "Разрешение на уведомления отклонено", Toast.LENGTH_SHORT).show()
             }
         }
+
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == AudioStreamService.ACTION_STATE) {
+                val running = intent.getBooleanExtra(AudioStreamService.EXTRA_IS_RUNNING, false)
+                applyRunningState(running)
+            }
+        }
+    }
+
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val b = binder as? AudioStreamService.AudioStreamBinder
+            service = b?.getService()
+            bound = true
+            applyRunningState(service?.isStreamRunning() == true)
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            bound = false
+            service = null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +110,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Подписка на состояние
+        registerReceiver(stateReceiver, IntentFilter(AudioStreamService.ACTION_STATE))
+        // Привязка к сервису для запроса текущего состояния
+        bindService(Intent(this, AudioStreamService::class.java), connection, BIND_AUTO_CREATE)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        unregisterReceiver(stateReceiver)
+        if (bound) {
+            unbindService(connection)
+            bound = false
+        }
+    }
+
     private fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33) {
             val granted = ContextCompat.checkSelfPermission(
@@ -91,5 +136,10 @@ class MainActivity : AppCompatActivity() {
                 requestNotifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    private fun applyRunningState(running: Boolean) {
+        buttonStart.isEnabled = !running
+        buttonStop.isEnabled = running
     }
 }
