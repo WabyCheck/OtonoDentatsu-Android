@@ -8,6 +8,9 @@ import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
 import android.widget.Button
@@ -77,6 +80,7 @@ class MainActivity : AppCompatActivity() {
                 startService(intent)
             } else {
                 ensureNotificationPermission()
+                ensureBatteryWhitelist()
 
                 val ip = editTextIP.text.toString()
                 val portText = editTextPort.text.toString()
@@ -146,5 +150,19 @@ class MainActivity : AppCompatActivity() {
     private fun applyRunningState(running: Boolean) {
         buttonToggle.text = if (running) "Стоп" else "Старт"
         buttonToggle.isEnabled = true
+    }
+
+    private fun ensureBatteryWhitelist() {
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            val pkg = packageName
+            val ignoring = pm.isIgnoringBatteryOptimizations(pkg)
+            if (!ignoring) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$pkg")
+                }
+                startActivity(intent)
+            }
+        } catch (_: Exception) { }
     }
 }
