@@ -152,10 +152,6 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
                     if (pkt != null) {
                         val pcm = decodeOpus(pkt, 960)
                         if (pcm != null) playAudio(pcm)
-                        // лёгкое темповое сглаживание при переполнении
-                        if (packetQueue.size > targetPrebuffer + 2) {
-                            try { Thread.sleep(5) } catch (_: Exception) {}
-                        }
                     } else {
                         // небольшая уступка планировщику
                         Thread.yield()
