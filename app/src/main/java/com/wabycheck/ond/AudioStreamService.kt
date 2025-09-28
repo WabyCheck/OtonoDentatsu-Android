@@ -11,6 +11,8 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeUnit
 
 class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
 
@@ -18,6 +20,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var udpReceiver: UDPReceiver? = null
     private var audioTrack: AudioTrack? = null
     private var isRunning = false
+    private val packetQueue = ArrayBlockingQueue<ByteArray>(200)
+    private var decoderThread: Thread? = null
 
     companion object {
         const val CHANNEL_ID = "AudioStreamChannelV2"
@@ -95,6 +99,25 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         udpReceiver = UDPReceiver(this)
         udpReceiver?.startListening(port)
 
+        // Запуск декодера с небольшим джиттер-буфером
+        decoderThread = Thread {
+            try {
+                // Предзаполнение ~несколькими пакетами для сглаживания
+                while (isRunning && packetQueue.size < 3) {
+                    Thread.sleep(2)
+                }
+                while (isRunning) {
+                    val pkt = packetQueue.poll(50, TimeUnit.MILLISECONDS)
+                    if (pkt != null) {
+                        val pcm = decodeOpus(pkt, 960)
+                        if (pcm != null) playAudio(pcm)
+                    }
+                }
+            } catch (_: InterruptedException) {
+            }
+        }
+        decoderThread?.start()
+
 
         isRunning = true
         sendState(true)
@@ -112,6 +135,11 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         audioTrack?.release()
         audioTrack = null
 
+        // Остановка потока декодера и очистка очереди
+        try { decoderThread?.interrupt() } catch (_: Exception) {}
+        decoderThread = null
+        packetQueue.clear()
+
 
         isRunning = false
         stopForeground(true)
@@ -119,10 +147,11 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     }
 
     override fun onPacketReceived(data: ByteArray, size: Int) {
-        // Декодирование Opus — стабильные настройки
-        val pcmData = decodeOpus(data, 960)
-        if (pcmData != null) {
-            playAudio(pcmData)
+        // Ставим пакет в очередь; при переполнении — удаляем самый старый
+        val copy = data.copyOf(size)
+        if (!packetQueue.offer(copy)) {
+            packetQueue.poll()
+            packetQueue.offer(copy)
         }
     }
 
