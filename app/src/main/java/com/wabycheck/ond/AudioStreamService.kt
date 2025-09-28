@@ -1,8 +1,10 @@
 package com.wabycheck.ond
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -27,6 +29,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var decoderThread: Thread? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    @Volatile private var targetPrebuffer: Int = 8
+    private var screenReceiver: BroadcastReceiver? = null
 
     companion object {
         const val CHANNEL_ID = "AudioStreamChannelV2"
@@ -63,6 +67,10 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         super.onCreate()
         createNotificationChannel()
         initOpusDecoder(48000, 2)
+        // начальная установка предзагрузки по состоянию экрана
+        updatePrebufferByScreen()
+        // слушаем события экрана для динамической подстройки буфера
+        registerScreenReceiver()
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -123,15 +131,23 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         udpReceiver = UDPReceiver(this)
         udpReceiver?.startListening(port)
 
-        // Запуск декодера с небольшим джиттер-буфером
+        // Запуск декодера с джиттер-буфером (динамически регулируется)
         decoderThread = Thread {
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-                // Предзаполнение ~несколькими пакетами для сглаживания
-                while (isRunning && packetQueue.size < 8) {
+                // начальное предзаполнение
+                while (isRunning && packetQueue.size < targetPrebuffer) {
                     Thread.sleep(2)
                 }
                 while (isRunning) {
+                    // если заполнение меньше целевого — немного подождём для накопления
+                    if (packetQueue.size < targetPrebuffer) {
+                        var waited = 0
+                        while (isRunning && packetQueue.size < targetPrebuffer && waited < 60) {
+                            Thread.sleep(2)
+                            waited += 2
+                        }
+                    }
                     val pkt = packetQueue.poll(10, TimeUnit.MILLISECONDS)
                     if (pkt != null) {
                         val pcm = decodeOpus(pkt, 960)
@@ -291,6 +307,39 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         stopAudioStream()
         destroyOpusDecoder()
         sendState(false)
+        unregisterScreenReceiver()
+    }
+
+    private fun registerScreenReceiver() {
+        if (screenReceiver != null) return
+        screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> { targetPrebuffer = 16 }
+                    Intent.ACTION_SCREEN_ON -> { targetPrebuffer = 8 }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(screenReceiver, filter)
+    }
+
+    private fun unregisterScreenReceiver() {
+        try { if (screenReceiver != null) unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+        screenReceiver = null
+    }
+
+    private fun updatePrebufferByScreen() {
+        try {
+            val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) pm.isInteractive else @Suppress("DEPRECATION") pm.isScreenOn
+            targetPrebuffer = if (interactive) 8 else 16
+        } catch (_: Exception) {
+            targetPrebuffer = 8
+        }
     }
 
     private fun sendState(running: Boolean) {
