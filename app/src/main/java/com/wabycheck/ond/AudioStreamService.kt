@@ -7,7 +7,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -19,7 +18,6 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var udpReceiver: UDPReceiver? = null
     private var audioTrack: AudioTrack? = null
     private var isRunning = false
-    private var wifiLock: WifiManager.WifiLock? = null
 
     companion object {
         const val CHANNEL_ID = "AudioStreamChannelV2"
@@ -97,15 +95,6 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         udpReceiver = UDPReceiver(this)
         udpReceiver?.startListening(port)
 
-        // High-performance Wi‑Fi (уменьшает задержки и джиттер)
-        try {
-            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            if (wifiLock == null) {
-                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "OND_Audio_HighPerf")
-                wifiLock?.setReferenceCounted(false)
-            }
-            wifiLock?.acquire()
-        } catch (_: Exception) {}
 
         isRunning = true
         sendState(true)
@@ -123,9 +112,6 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         audioTrack?.release()
         audioTrack = null
 
-        // Release Wi‑Fi high performance lock
-        try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
-        wifiLock = null
 
         isRunning = false
         stopForeground(true)
@@ -133,8 +119,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     }
 
     override fun onPacketReceived(data: ByteArray, size: Int) {
-        // Декодирование Opus (Ultra‑low latency: 2.5ms → 120 сэмплов)
-        val pcmData = decodeOpus(data, 120)
+        // Декодирование Opus — стабильные настройки
+        val pcmData = decodeOpus(data, 960)
         if (pcmData != null) {
             playAudio(pcmData)
         }
@@ -155,32 +141,23 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
             val audioAttributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setLegacyStreamType(AudioManager.STREAM_MUSIC)
                 .build()
 
-            val format = AudioFormat.Builder()
+            val audioFormatBuilder = AudioFormat.Builder()
                 .setSampleRate(sampleRate)
                 .setChannelMask(channelConfig)
                 .setEncoding(audioFormat)
                 .build()
 
-            audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(format)
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                    .build()
-            } else {
-                @Suppress("DEPRECATION")
-                AudioTrack(
-                    audioAttributes,
-                    format,
-                    bufferSize,
-                    AudioTrack.MODE_STREAM,
-                    AudioManager.AUDIO_SESSION_ID_GENERATE
-                )
-            }
+            @Suppress("DEPRECATION")
+            audioTrack = AudioTrack(
+                audioAttributes,
+                audioFormatBuilder,
+                bufferSize,
+                AudioTrack.MODE_STREAM,
+                AudioManager.AUDIO_SESSION_ID_GENERATE
+            )
             audioTrack?.play()
         }
 
