@@ -33,6 +33,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
 
         // Дополнительные параметры
         const val EXTRA_PORT = "port"
+        const val EXTRA_SERVER_IP = "server_ip"
 
         // Загрузка native библиотеки
         init {
@@ -61,7 +62,12 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         when (intent?.action) {
             ACTION_START -> {
                 val port = intent.getIntExtra(EXTRA_PORT, 5000)
+                val serverIp = intent.getStringExtra(EXTRA_SERVER_IP)
                 startAudioStream(port)
+                if (!serverIp.isNullOrBlank()) {
+                    // отправим HELLO на ПК с того же порта
+                    udpReceiver?.sendHello(serverIp, port)
+                }
             }
             ACTION_STOP -> {
                 stopAudioStream()

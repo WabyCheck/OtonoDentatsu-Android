@@ -54,4 +54,15 @@ class UDPReceiver(
         receiverThread?.interrupt()
         receiverThread = null
     }
+
+    fun sendHello(targetIp: String, targetPort: Int) {
+        try {
+            val s = socket ?: return
+            val data = "HELLO".toByteArray()
+            val addr = InetAddress.getByName(targetIp)
+            val packet = DatagramPacket(data, data.size, addr, targetPort)
+            s.send(packet)
+        } catch (_: Exception) {
+        }
+    }
 }

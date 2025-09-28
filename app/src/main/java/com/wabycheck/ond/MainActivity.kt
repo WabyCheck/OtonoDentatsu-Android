@@ -90,6 +90,7 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, AudioStreamService::class.java).apply {
                 action = AudioStreamService.ACTION_START
                 putExtra(AudioStreamService.EXTRA_PORT, port)
+                putExtra(AudioStreamService.EXTRA_SERVER_IP, ip)
             }
             ContextCompat.startForegroundService(this, intent)
 
