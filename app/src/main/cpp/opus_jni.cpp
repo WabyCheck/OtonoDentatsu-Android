@@ -175,6 +175,79 @@ Java_com_wabycheck_ond_MainActivity_destroyOpusDecoder(JNIEnv *env, jobject thiz
     globalDecoder.reset();
 }
 
+// === Дубликаты для AudioStreamService (используют тот же globalDecoder) ===
+
+JNIEXPORT void JNICALL
+Java_com_wabycheck_ond_AudioStreamService_initOpusDecoder(JNIEnv *env, jobject thiz, jint sample_rate, jint channels) {
+    // Уничтожить предыдущий декодер если есть
+    globalDecoder.reset();
+
+    // Создать новый
+    globalDecoder = std::make_unique<OpusDecoderWrapper>(sample_rate, channels);
+
+    if (!globalDecoder->isValid()) {
+        LOGE("Не удалось создать декодер");
+        globalDecoder.reset();
+    }
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_wabycheck_ond_AudioStreamService_decodeOpus(JNIEnv *env, jobject thiz, jbyteArray encoded_data, jint frame_size) {
+    if (!globalDecoder || !globalDecoder->isValid()) {
+        LOGE("Декодер не инициализирован");
+        return nullptr;
+    }
+
+    // Получить входные данные
+    jsize encodedLength = env->GetArrayLength(encoded_data);
+    if (encodedLength <= 0) {
+        LOGE("Пустые входные данные");
+        return nullptr;
+    }
+
+    jbyte* encodedBuffer = env->GetByteArrayElements(encoded_data, nullptr);
+    if (!encodedBuffer) {
+        LOGE("Не удалось получить входной буфер");
+        return nullptr;
+    }
+
+    // Выходной буфер для PCM данных
+    int maxSamples = (frame_size > 0) ? frame_size : globalDecoder->getMaxFrameSize();
+    std::vector<short> pcmBuffer(maxSamples * globalDecoder->getChannels());
+
+    // Декодировать
+    int decodedSamples = globalDecoder->decode(
+            reinterpret_cast<const unsigned char*>(encodedBuffer),
+            encodedLength,
+            pcmBuffer.data(),
+            maxSamples
+    );
+
+    // Освободить входной буфер
+    env->ReleaseByteArrayElements(encoded_data, encodedBuffer, JNI_ABORT);
+
+    if (decodedSamples < 0) {
+        LOGE("Ошибка декодирования: %d", decodedSamples);
+        return nullptr;
+    }
+
+    // Создать выходной массив Java
+    jsize outputSize = decodedSamples * globalDecoder->getChannels() * sizeof(short);
+    jbyteArray output = env->NewByteArray(outputSize);
+
+    if (output) {
+        env->SetByteArrayRegion(output, 0, outputSize,
+                                reinterpret_cast<jbyte*>(pcmBuffer.data()));
+    }
+
+    return output;
+}
+
+JNIEXPORT void JNICALL
+Java_com_wabycheck_ond_AudioStreamService_destroyOpusDecoder(JNIEnv *env, jobject thiz) {
+    globalDecoder.reset();
+}
+
 // === Улучшенные функции для потокового воспроизведения ===
 
 JNIEXPORT jlong JNICALL
