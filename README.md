@@ -15,4 +15,4 @@
  Permissions:
  - INTERNET, RECORD_AUDIO (if needed), FOREGROUND_SERVICE, POST_NOTIFICATIONS (13+), WAKE_LOCK
 
- License: MIT (add your choice)
+ License: MIT
