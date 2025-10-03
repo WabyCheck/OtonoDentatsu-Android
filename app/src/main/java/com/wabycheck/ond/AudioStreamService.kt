@@ -29,7 +29,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var decoderThread: Thread? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    @Volatile private var targetPrebuffer: Int = 6
+    @Volatile private var targetPrebuffer: Int = 4
     private var screenReceiver: BroadcastReceiver? = null
 
     companion object {
@@ -136,7 +136,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         decoderThread = Thread {
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-                // начальное предзаполнение
+                // начальное предзаполнение (минимально допустимое)
                 while (isRunning && packetQueue.size < targetPrebuffer) {
                     Thread.sleep(2)
                 }
@@ -149,6 +149,11 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
                     } else {
                         val plc = decodePlc(960)
                         if (plc != null) playAudio(plc) else Thread.yield()
+                    }
+                    // жёсткий лимит задержки: если очередь разрослась — обрежем до целевого предбуфера
+                    val extra = packetQueue.size - (targetPrebuffer + 2)
+                    if (extra > 0) {
+                        repeat(extra) { packetQueue.poll() }
                     }
                 }
             } catch (_: InterruptedException) {
