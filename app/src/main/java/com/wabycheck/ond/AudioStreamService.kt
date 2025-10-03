@@ -29,7 +29,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     private var decoderThread: Thread? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    @Volatile private var targetPrebuffer: Int = 12
+    @Volatile private var targetPrebuffer: Int = 6
     private var screenReceiver: BroadcastReceiver? = null
 
     companion object {
@@ -57,6 +57,7 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
     // Native методы
     private external fun initOpusDecoder(sampleRate: Int, channels: Int)
     private external fun decodeOpus(encodedData: ByteArray, frameSize: Int): ByteArray?
+    private external fun decodePlc(frameSize: Int): ByteArray?
     private external fun destroyOpusDecoder()
 
     inner class AudioStreamBinder : Binder() {
@@ -140,21 +141,14 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
                     Thread.sleep(2)
                 }
                 while (isRunning) {
-                    // если заполнение меньше целевого — немного подождём для накопления
-                    if (packetQueue.size < targetPrebuffer) {
-                        var waited = 0
-                        while (isRunning && packetQueue.size < targetPrebuffer && waited < 60) {
-                            Thread.sleep(2)
-                            waited += 2
-                        }
-                    }
-                    val pkt = packetQueue.poll(10, TimeUnit.MILLISECONDS)
+                    // читаем быстро; если пакета нет — генерируем PLC, чтобы не было провала
+                    val pkt = packetQueue.poll(5, TimeUnit.MILLISECONDS)
                     if (pkt != null) {
                         val pcm = decodeOpus(pkt, 960)
                         if (pcm != null) playAudio(pcm)
                     } else {
-                        // небольшая уступка планировщику
-                        Thread.yield()
+                        val plc = decodePlc(960)
+                        if (plc != null) playAudio(plc) else Thread.yield()
                     }
                 }
             } catch (_: InterruptedException) {

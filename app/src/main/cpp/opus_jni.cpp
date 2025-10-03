@@ -243,6 +243,36 @@ Java_com_wabycheck_ond_AudioStreamService_decodeOpus(JNIEnv *env, jobject thiz, 
     return output;
 }
 
+JNIEXPORT jbyteArray JNICALL
+Java_com_wabycheck_ond_AudioStreamService_decodePlc(JNIEnv *env, jobject thiz, jint frame_size) {
+    if (!globalDecoder || !globalDecoder->isValid()) {
+        LOGE("Декодер не инициализирован (PLC)");
+        return nullptr;
+    }
+
+    int maxSamples = (frame_size > 0) ? frame_size : globalDecoder->getMaxFrameSize();
+    std::vector<short> pcmBuffer(maxSamples * globalDecoder->getChannels());
+
+    int decodedSamples = globalDecoder->decode(
+            nullptr,
+            0,
+            pcmBuffer.data(),
+            maxSamples
+    );
+
+    if (decodedSamples <= 0) {
+        return nullptr;
+    }
+
+    jsize outputSize = decodedSamples * globalDecoder->getChannels() * sizeof(short);
+    jbyteArray output = env->NewByteArray(outputSize);
+    if (output) {
+        env->SetByteArrayRegion(output, 0, outputSize,
+                                reinterpret_cast<jbyte*>(pcmBuffer.data()));
+    }
+    return output;
+}
+
 JNIEXPORT void JNICALL
 Java_com_wabycheck_ond_AudioStreamService_destroyOpusDecoder(JNIEnv *env, jobject thiz) {
     globalDecoder.reset();
