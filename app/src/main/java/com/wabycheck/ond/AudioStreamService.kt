@@ -314,8 +314,8 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_OFF -> { targetPrebuffer = 16 }
-                    Intent.ACTION_SCREEN_ON -> { targetPrebuffer = 8 }
+                    Intent.ACTION_SCREEN_OFF -> { targetPrebuffer = 8 }
+                    Intent.ACTION_SCREEN_ON -> { targetPrebuffer = 4 }
                 }
             }
         }
@@ -340,9 +340,9 @@ class AudioStreamService : Service(), UDPReceiver.OnPacketReceivedListener {
         try {
             val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) pm.isInteractive else @Suppress("DEPRECATION") pm.isScreenOn
-            targetPrebuffer = if (interactive) 12 else 24
+            targetPrebuffer = if (interactive) 4 else 8
         } catch (_: Exception) {
-            targetPrebuffer = 12
+            targetPrebuffer = 4
         }
     }
 
