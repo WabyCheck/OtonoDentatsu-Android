@@ -211,16 +211,26 @@ Java_com_wabycheck_ond_AudioStreamService_decodeOpus(JNIEnv *env, jobject thiz, 
         return nullptr;
     }
 
-    // Выходной буфер для PCM данных
-    int maxSamples = (frame_size > 0) ? frame_size : globalDecoder->getMaxFrameSize();
-    std::vector<short> pcmBuffer(maxSamples * globalDecoder->getChannels());
+    // Определить реальное число сэмплов в пакете (120/240/480/960 и т.д.)
+    int packetSamples = opus_packet_get_nb_samples(
+            reinterpret_cast<const unsigned char*>(encodedBuffer),
+            encodedLength,
+            globalDecoder->getSampleRate()
+    );
+    if (packetSamples <= 0) {
+        // Fallback на максимально допустимый фрейм
+        packetSamples = (frame_size > 0) ? frame_size : globalDecoder->getMaxFrameSize();
+    }
 
-    // Декодировать
+    // Выходной буфер для PCM данных
+    std::vector<short> pcmBuffer(packetSamples * globalDecoder->getChannels());
+
+    // Декодировать с авто-подстройкой размера
     int decodedSamples = globalDecoder->decode(
             reinterpret_cast<const unsigned char*>(encodedBuffer),
             encodedLength,
             pcmBuffer.data(),
-            maxSamples
+            packetSamples
     );
 
     // Освободить входной буфер
